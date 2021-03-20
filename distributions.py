@@ -1,13 +1,8 @@
-import numpy as np
 import matplotlib.pyplot as plt
-import pandas as pd
-
-
-
-import seaborn as sb, numpy as np
+import seaborn as sb, numpy as np,pandas as pd
 from scipy.stats import binom,poisson,norm,pareto
 
-#questao1
+# discrete distributions: 
 
 data_binom = binom.rvs(n=20,p=0.15,loc=0,size=999999)
 ax = sb.distplot(data_binom,kde=True,color='blue',hist_kws={"linewidth": 15,'alpha':1})
@@ -16,7 +11,6 @@ plt.show()
 cdf = []
 for k in range(15):
     cdf.append(binom.cdf(n=20, p=0.15, k=k))
-
 plt.plot(cdf)
 plt.show()
 
