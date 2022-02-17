@@ -1,0 +1,182 @@
+---
+title: "Posterior Distribution"
+output: html_notebook
+---
+
+### Grid Aproximation:
+
+
+This is an definition and examples of ones of the simplest ways to calculate posterior probability: Grid aproximation.
+Although this methodology is not feasible  in practical application due to computational problems, it is very important to understand the nature of Bayes theorem. 
+In the example below, we are look to claculate th posterior of a Binomial distribution. As prior for the probability "p", we use use a uniform distribution. 
+The likelihood is based on a the result of 6 sucess in 9 trials. 
+
+```{r}
+# define grid
+p_grid <- seq( from=0 , to=1 , length.out=30 )
+# define prior
+prior <- rep( 1 , 30 )
+#prior <- ifelse( p_grid < 0.5 , 0 , 1 ) 
+#prior <- exp( -5*abs( p_grid - 0.5 ) )
+# compute likelihood at each value in grid
+likelihood <- dbinom( 6 , size=9 , prob=p_grid )
+# compute product of likelihood and prior
+unstd.posterior <- likelihood * prior
+# standardize the posterior, so it sums to 1
+posterior <- unstd.posterior / sum(unstd.posterior)
+```
+
+
+
+```{r}
+plot( p_grid , posterior , type="b" ,
+xlab="probability of water" , ylab="posterior probability" )
+mtext( "30 points" )
+```
+
+### Quadratic approximation:
+
+Another way to calculate the posterior probability is using quadratic approximation. This technique assumes that the posterior probability is Normal distributed (Gaussian curve). So it's use an optimization algorithm to find the parameters of the Gaussian curve of the posterior probability. This algorithm finds the peak of the curve and analyses the values around the peak to calculate the standard derivation. 
+This methodology is called quadratic approximation because of the quadratic curve of the log Normal. 
+```{r}
+library(rethinking)
+globe.qa <- quap(
+alist(
+W ~ dbinom( W+L ,p) , # binomial likelihood
+p ~ dunif(0,1) # uniform prior
+) ,
+data=list(W=6,L=3) )
+# display summary of quadratic approximation
+precis( globe.qa )
+
+```
+Now we are going to compare the posterior probability calculated by the quadratic approximation and the analytic calculation. The dash line represents the quadratic approximation and the continuous is the analytics result. 
+One important thing is as the amount of data increases, the quadratic approximation gets better.
+
+```{r}
+# analytical calculation 2.7
+W <- 6
+L <- 3
+curve( dbeta( x , W+1 , L+1 ) , from=0 , to=1 )
+# quadratic approximation
+curve( dnorm( x , 0.67 , 0.16 ) , lty=2 , add=TRUE )
+```
+
+
+### Markov chain Monte Carlo:
+
+This is an different way to reach the posterior probability. Instead of attempting to compute or approximate the posterior distribution directly, MCMC techniques merely draw samples from the posterior many times and get the curve. 
+
+```{r}
+n_samples <- 1000
+p <- rep( NA , n_samples )
+p[1] <- 0.5
+W <- 6
+L <- 3
+for ( i in 2:n_samples ) {
+p_new <- rnorm( 1 , p[i-1] , 0.1 )
+if ( p_new < 0 ) p_new <- abs( p_new )
+if ( p_new > 1 ) p_new <- 2 - p_new
+q0 <- dbinom( W , W+L , p[i-1] )
+q1 <- dbinom( W , W+L , p_new )
+p[i] <- ifelse( runif(1) < q1/q0 , p_new , p[i-1] )
+}
+dens( p , xlim=c(0,1) )
+curve( dbeta( x , W+1 , L+1 ) , lty=2 , add=TRUE )
+```
+## Chossing the best p value by a loss function: 
+
+First we are going to define the posterior probability. In this case we also sample same values from this probability distribution. 
+```{r}
+
+p_grid <- seq( from=0 , to=1 , length.out=1000 )
+prior <- rep(1,1000)
+likelihood <- dbinom( 6 , size=9 , prob=p_grid )
+posterior <- likelihood * prior
+posterior <- posterior / sum(posterior)
+samples <- sample( p_grid , size=1e4 , replace=TRUE , prob=posterior )
+
+```
+It's intuitive to summarize this distribution to one number by choosing the most frequent one (mode). Although it is a valid strategy, we don't know that is the true value. To better choose the value, we will define a loss function that is a function that measure the cost of use an specific value. 
+
+The loss function above calculate the absolute difference between each possible p value to all of the others p values weighted by the probability of each of them. 
+
+```{r}
+loss <- sapply( p_grid , function(d) sum( posterior*abs( d - p_grid ) ) )
+```
+
+The main idea of this loss function is to calculate the cost of choose the wrong value of p. So to choose the best one we will choose the one that has the minumun value of the loss function. 
+
+```{r}
+p_grid[ which.min(loss) ]
+```
+This value is approximated to the median value. 
+
+```{r}
+median(samples)
+```
+Otherwise, if we choose the quadratic difference in place of the absolute diference, we will find another p value as result: 
+
+```{r}
+loss <- sapply( p_grid , function(d) sum( posterior*( d - p_grid )^2 ))
+p_grid[ which.min(loss) ]
+```
+```{r}
+mean(samples)
+```
+The result is very close to the mean value! 
+
+### Simulating 
+So, after we chose the p value, we are able to simulate some outcomes from our statistical model. 
+The statistical model of the experiment is a Binomial distribution. Here, we chose a proportion of 0.84, and simulate 2 trials of the experiment. 
+```{r}
+dbinom( 0:2 , size=2 , prob=0.84 )
+```
+By the result, we can see the probability of get w = 0,1,2 (in the 2 trials). Where W is the water result.
+
+Now, we are going to sample from this model N examples of 2 trials. The result represents the number of W (water) in each of the experiment. 
+```{r}
+N <- 5
+rbinom( N , size=2 , prob=0.84 )
+```
+```{r}
+dummy_w <- rbinom( 1e5 , size=2 , prob=0.84 )
+table(dummy_w)/1e5
+```
+
+The simulation above converge to the analytic simulation.
+
+Another smart way to simulation this problem is by propagating the uncertain about the proportion of th P value. 
+In this next example, we are going to calculate the distribution of the experiment by analyzing a lot of sample of a 10 tossing trial and counting the number of successes. 
+We are going to calculating it in two ways; the first one we select an specific P value (the mean) and the second we use a posterior distribution of this parameter. 
+
+```{r}
+# Calculating the posterior probabilty
+p_grid <- seq( from=0 , to=1 , length.out=1000 )
+prior <- rep(1,1000)
+likelihood <- dbinom( 6 , size=9 , prob=p_grid )
+posterior <- likelihood * prior
+posterior <- posterior / sum(posterior)
+plot( p_grid , posterior , type="b" ,
+xlab="The P value" , ylab="posterior probability" )
+
+#sampling 10000 values from the posterior distribution. 
+samples <- sample( p_grid , size=1e4 , replace=TRUE , prob=posterior )
+p_chosen <- mean(samples)
+```
+
+
+
+```{r}
+library(rethinking)
+w1 <- rbinom( 1e4 , size=9 , prob=samples )
+w2 <- rbinom( 1e4 , size=9 , prob=p_chosen )
+simplehist(w1,col =  rgb(red = 0, green = 1, blue = 0, alpha = 0.8),xlim = c(0,9),ylim = c(0,4000))
+par(new=TRUE)
+simplehist(w2,col = rgb(red = 1, green = 0, blue = 0, alpha = 0.2),xlim = c(0,9),ylim = c(0,4000))
+```
+By the figure above we can see a difference of the frequency in every number of "success". We are comparing a model with p = 0.63 and another that assumes p with a posterior probability of get 6 success in 9 tosses (likelihood experiment). So, the posterior probability of P represents all the probability associated with all possible values of P (0 to 1) based on the uniform priori and the likelihood (that is 6 success in 9 trials). 
+In this plot we simulated 10000 values to be certain about the the distribution outcomes. 
+Although there is a intuitive similarity about the two distribution, they demonstrated a consistent difference. The red distribution were generated by chosen an specific p value; in this example, we chose the mean of all the values. This is by the mean is the approximation of the expected value in the samples.  
+The green one is considering all de distribution of the P value. The green one is a more spread distribution because of that.
+

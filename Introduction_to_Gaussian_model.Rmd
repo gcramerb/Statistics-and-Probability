@@ -1,0 +1,97 @@
+---
+title: "Gaussian Model"
+output: Gaussian
+---
+This is the chapter 4 summary. Here we are going to talk about the Normal distribution. The chapter is based on a dataset describing the height, weight,age and male/female of a population. The cells below show the dataset:
+
+```{r}
+library(rethinking)
+data(Howell1)
+d <- Howell1
+ str( d )
+```
+
+```{r}
+precis( d )
+
+```
+
+We are going to create a Gaussian Model for the Height, so we want to estimate the parameters mu and sigma of the Normal distribution.
+
+We are going to assume some prior distributions. The first one is the mu parameter of the height, witch will be assumed as A normal distribution centered in 178 with sd 20. This was choose by the human population.
+tHE MODELATION CONSISTS IN: 
+Height ~ Nonmal(mu,sig)
+mu ~ Normal(178,20)
+sig ~ Uniform(0,50)
+```{r}
+
+curve( dnorm( x , 178 , 20 ) , from=100 , to=250 ,main = 'Prior distr of mu parameter')
+
+```
+Now, we are going to consider a prior distribution of the sig. This distribution can be a litle bit large. For example we choose the upper limit (50) of a standard derivation, this will implies in a distribution that do not fit with the reality. In this example we will see the implications of the prior distribution. 
+```{r}
+curve( dunif( x , 0 , 50 ) , from=-10 , to=60 )
+```
+##### Simulation assuming the priors distribution: 
+The simulation is also important to see bad prior distribution options. In the cell below we construct two prior distribution of the variable height. Eache of them were chosen by assuming different prior distribution of the the mu and sigma that represents this Normal distribution.  
+```{r}
+sample_mu <- rnorm( 1e4 , 178 , 20 ) 
+sample_sigma <- runif( 1e4 , 0 , 50 )
+prior_h <- rnorm( 1e4 , sample_mu , sample_sigma )
+dens( prior_h ,xlim = c(-200,600),ylim = c(0,0.0135))
+par(new=TRUE)
+sample_mu <- rnorm( 1e4 , 178 , 100 ) 
+
+prior_h <- rnorm( 1e4 , sample_mu , sample_sigma )
+dens( prior_h ,col = 'blue',xlim = c(-200,600),ylim = c(0,0.0135))
+
+```
+It's possible to see that the blue distribution covers people with negative height, and also people with more them 4m. 
+
+##### Posterior distribution:
+
+This is the firs model that has two parameters. The only new trick is that since there are two parameters, and we want to sample combinations of them. 
+In the cell below we calculate the posterior probability.
+
+```{r}
+d2 <- d[d$age>=18,]
+mu.list <- seq( from=150, to=160 , length.out=100 ) 
+sigma.list <- seq( from=7 , to=9 , length.out=100 )
+post <- expand.grid( mu=mu.list , sigma=sigma.list )
+post$LL <- sapply( 1:nrow(post) , function(i) sum(
+dnorm( d2$height , post$mu[i] , post$sigma[i] , log=TRUE ) ) )
+post$prod <- post$LL + dnorm( post$mu , 178 , 20 , TRUE ) +
+dunif( post$sigma , 0 , 50 , TRUE )
+post$prob <- exp( post$prod - max(post$prod) )
+image_xyz( post$mu , post$sigma , post$prob )
+```
+
+Now, we are going to sample from the posterior distribution and analyse the outcomes. 
+
+```{r}
+sample.rows <- sample( 1:nrow(post) , size=1e4 , replace=TRUE ,
+prob=post$prob )
+sample.mu <- post$mu[ sample.rows ]
+sample.sigma <- post$sigma[ sample.rows ]
+plot( sample.mu , sample.sigma , cex=0.5 , pch=16 , col=col.alpha(rangi2,0.1) )
+```
+
+
+
+```{r}
+dens( sample.mu ) 
+dens( sample.sigma )
+PI( sample.mu )
+PI( sample.sigma )
+```
+
+
+
+
+
+
+
+
+
+
+

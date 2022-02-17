@@ -1,0 +1,140 @@
+---
+title: "Linear Regression"
+output: linearRegression
+
+This File aims to explain what is Linear Regression under the hood. We are going the see the fundamentals of linear regrassion with a simple experiment. 
+
+This is the data that we are going to use. This is the height, weight, age and sex of a set of individuous. 
+---
+```{r}
+library(rethinking)
+data(Howell1)
+d <- Howell1
+
+precis( d )
+d2 <- d[ d$age >= 18 , ]
+```
+
+We want the predict the height, based on the others variables. This is the first step. We define the priors of this variable. 
+We assume Normal distribution. 
+
+```{r}
+
+sample_mu <- rnorm( 1e4 , 178 , 20 ) 
+sample_sigma <- runif( 1e4 , 0 , 50 )
+prior_h <- rnorm( 1e4 , sample_mu , sample_sigma )
+dens( prior_h )
+sample_mu <- rnorm( 1e4 , 178 , 100 ) 
+prior_h <- rnorm( 1e4 , sample_mu , sample_sigma )
+dens( prior_h )
+
+```
+
+Calculando a posteriori a partir da prior 1. 
+
+
+
+```{r}
+
+mu.list <- seq( from=150, to=160 , length.out=100 )
+sigma.list <- seq( from=7 , to=9 , length.out=100 )
+post <- expand.grid( mu=mu.list , sigma=sigma.list )
+post$LL <- sapply( 1:nrow(post) , function(i) sum(
+dnorm( d2$height , post$mu[i] , post$sigma[i] , log=TRUE ) ) )
+post$prod <- post$LL + dnorm( post$mu , 178 , 20 , TRUE ) +
+dunif( post$sigma , 0 , 50 , TRUE )
+post$prob <- exp( post$prod - max(post$prod) )
+
+sample.rows <- sample( 1:nrow(post) , size=1e4 , replace=TRUE ,prob=post$prob )
+sample.mu <- post$mu[ sample.rows ]
+sample.sigma <- post$sigma[ sample.rows ]
+plot( sample.mu , sample.sigma , cex=0.5 , col=col.alpha(rangi2,0.1) , xlab="mu" , ylab="sigma" , pch=16 )
+
+
+```
+
+
+
+```{r}
+d3 <- d2
+mu.list <- seq( from=150, to=170 , length.out=200 ) 
+sigma.list <- seq( from=4 , to=20 , length.out=200 )
+post2 <- expand.grid( mu=mu.list , sigma=sigma.list )
+post2$LL <- sapply( 1:nrow(post2) , function(i) sum( dnorm( d3 , mean=post2$mu[i] , sd=post2$sigma[i] ,log=TRUE ) ) )
+post2$prod <- post2$LL + dnorm( post2$mu , 178 , 20 , TRUE ) + dunif( post2$sigma , 0 , 50 , TRUE )
+post2$prob <- exp( post2$prod - max(post2$prod) )
+
+sample2.rows <- sample( 1:nrow(post2) , size=1e4 , replace=TRUE ,prob=post2$prob )
+sample2.mu <- post2$mu[ sample2.rows ]
+sample2.sigma <- post2$sigma[ sample2.rows ]
+plot( sample2.mu , sample2.sigma , cex=0.5 , col=col.alpha(rangi2,0.1) , xlab="mu" , ylab="sigma" , pch=16 )
+            
+```
+
+
+```{r}
+# load data again, since it's a long way back
+library(rethinking)
+data(Howell1)
+d <- Howell1
+d2 <- d[ d$age >= 18 , ]
+# define the average weight, x-bar
+xbar <- mean(d2$weight)
+# fit model
+m4.3 <- quap(
+alist(height ~ dnorm( mu , sigma ) ,
+mu <- a + b*( weight - xbar ) ,
+a ~ dnorm( 178 , 20 ) ,
+b ~ dlnorm( 0 , 1 ) ,
+sigma ~ dunif( 0 , 50 )
+) ,
+data=d2 )
+```
+
+```{r}
+plot( height ~ weight , data=d2 , col=rangi2 ) 
+post <- extract.samples( m4.3 )
+a_map <- mean(post$a)
+b_map <- mean(post$b)
+curve( a_map + b_map*(x - xbar) , add=TRUE )
+```
+
+Focus for the moment on a single weight value, say 50 kilograms. You can quickly make
+a list of 10,000 values of µ for an individual who weighs 50 kilograms, by using your samples
+from the posterior:
+
+```{r}
+post <- extract.samples( m4.3 )
+mu_at_50 <- post$a + post$b * ( 50 - xbar )
+```
+ data), assuming the weight is 50 kg.
+That’s good so far, but we need to repeat the above calculation for every weight value
+on the horizontal axis, not just when it is 50 kg. We want to draw 89% intervals around the
+average slope in Figure 4.6
+
+Use link to generate distributions of posterior values for µ. The default behavior
+of link is to use the original data, so you have to pass it a list of new horizontal axis
+values you want to plot posterior predictions across.
+What you’ve done so far is just use samples from the posterior to visualize the uncertainty
+in µi,
+
+```{r}
+
+ mu <- link( m4.3 )
+str(mu)
+# define sequence of weights to compute predictions for
+# these values will be on the horizontal axis
+weight.seq <- seq( from=25 , to=70 , by=1 )
+# use link to compute mu
+# for each sample from posterior
+# and for each weight in weight.seq
+mu <- link( m4.3 , data=data.frame(weight=weight.seq) )
+str(mu)
+# use type="n" to hide raw data
+plot( height ~ weight , d2 , type="n" )
+# loop over samples and plot each mu value
+for ( i in 1:100 )
+points( weight.seq , mu[i,] , pch=16 , col=col.alpha(rangi2,0.1) )
+```
+
+
