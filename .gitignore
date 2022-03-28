@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 FECD/
 Statistical Rethinking/
+Data/
 # C extensions
 *.so
 

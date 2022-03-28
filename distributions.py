@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import seaborn as sb, numpy as np,pandas as pd
 from scipy.stats import binom,poisson,norm,pareto
-
+import daft
 # discrete distributions: 
 
 data_binom = binom.rvs(n=20,p=0.15,loc=0,size=999999)
